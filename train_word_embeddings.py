@@ -29,7 +29,7 @@ if __name__ == '__main__':
                         batch_loader.chars_vocab_size)
 
     neg_loss = NEG_loss(params.word_vocab_size, params.word_embed_size)
-    if args.use_cuda:
+    if args.use_cuda and t.cuda.is_available():
         neg_loss = neg_loss.cuda()
 
     # NEG_loss is defined over two embedding matrixes with shape of [params.word_vocab_size, params.word_embed_size]
@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
         input = Variable(t.from_numpy(input_idx).long())
         target = Variable(t.from_numpy(target_idx).long())
-        if args.use_cuda:
+        if args.use_cuda and t.cuda.is_available():
             input, target = input.cuda(), target.cuda()
 
         out = neg_loss(input, target, args.num_sample).mean()
