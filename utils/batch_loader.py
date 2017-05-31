@@ -75,16 +75,16 @@ class BatchLoader:
         self.prefix = prefix+'_' if prefix else '' 
         self.word_is_char = word_is_char
 
-        self.data_files = [path + 'data/' + prefix + 'train.txt',
-                           path + 'data/' + prefix + 'test.txt']
+        self.data_files = [path + 'data/' + self.prefix + 'train.txt',
+                           path + 'data/' + self.prefix + 'test.txt']
 
-        self.idx_files = [path + 'data/' + prefix + 'words_vocab.pkl',
-                          path + 'data/' + prefix + 'characters_vocab.pkl']
+        self.idx_files = [path + 'data/' + self.prefix + 'words_vocab.pkl',
+                          path + 'data/' + self.prefix + 'characters_vocab.pkl']
 
-        self.tensor_files = [[path + 'data/' + prefix + 'train_word_tensor.npy',
-                              path + 'data/' + prefix + 'valid_word_tensor.npy'],
-                             [path + 'data/' + prefix + 'train_character_tensor.npy',
-                              path + 'data/' + prefix + 'valid_character_tensor.npy']]
+        self.tensor_files = [[path + 'data/' + self.prefix + 'train_word_tensor.npy',
+                              path + 'data/' + self.prefix + 'valid_word_tensor.npy'],
+                             [path + 'data/' + self.prefix + 'train_character_tensor.npy',
+                              path + 'data/' + self.prefix + 'valid_character_tensor.npy']]
 
         self.blind_symbol = ''
         self.pad_token = '_'
