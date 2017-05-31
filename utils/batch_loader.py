@@ -72,7 +72,7 @@ class BatchLoader:
                     encoder_word_input and encoder_character_input have reversed order of the words
                         in case of performance
         '''
-
+	prefix = prefix+'_' if prefix else '' 
         self.data_files = [path + 'data/' + prefix + 'train.txt',
                            path + 'data/' + prefix + 'test.txt']
 
