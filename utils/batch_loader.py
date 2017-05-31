@@ -274,7 +274,7 @@ class BatchLoader:
         :return:
             tuple of input and output for word embedding learning,
             where input = [b, b, c, c, d, d, e, e]
-            and output  = [a, c, b, d, d, e, d, g]
+            and output  = [a, c, b, d, c, e, d, g]
             for line [a, b, c, d, e, g] at index i
         """
 
