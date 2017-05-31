@@ -22,7 +22,9 @@ if __name__ == '__main__':
                         help='use cuda (default: True)')
     args = parser.parse_args()
 
-    batch_loader = BatchLoader('')
+    prefix = 'poem'
+
+    batch_loader = BatchLoader('', prefix)
     params = Parameters(batch_loader.max_word_len,
                         batch_loader.max_seq_len,
                         batch_loader.words_vocab_size,
@@ -55,4 +57,4 @@ if __name__ == '__main__':
             print('iteration = {}, loss = {}'.format(iteration, out))
 
     word_embeddings = neg_loss.input_embeddings()
-    np.save('data/word_embeddings.npy', word_embeddings)
+    np.save('data/' + (prefix + '_' if prefix else '') + 'word_embeddings.npy', word_embeddings)
