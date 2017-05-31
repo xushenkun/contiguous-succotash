@@ -149,7 +149,7 @@ class BatchLoader:
         # unique characters with blind symbol
         chars = list(set(data)) + [self.blind_symbol, self.pad_token, self.go_token, self.end_token]
         chars_vocab_size = len(chars)
-        print('chars_vocab_size:' + chars_vocab_size)
+        print('chars_vocab_size:%s'%chars_vocab_size)
         # mappings itself
         idx_to_char = chars
         char_to_idx = {x: i for i, x in enumerate(idx_to_char)}
@@ -166,7 +166,7 @@ class BatchLoader:
         idx_to_word = list(sorted(idx_to_word)) + [self.pad_token, self.go_token, self.end_token]
 
         words_vocab_size = len(idx_to_word)
-        print('words_vocab_size:' + words_vocab_size)
+        print('words_vocab_size:%s'%words_vocab_size)
         # Mapping from word to index
         word_to_idx = {x: i for i, x in enumerate(idx_to_word)}
 
@@ -205,7 +205,7 @@ class BatchLoader:
             np.save(path, self.character_tensor[i])
 
         self.just_words = [word for line in self.word_tensor[0] for word in line]
-        print('just_words:' + len(self.just_words))
+        print('just_words:%s'%len(self.just_words))
 
     def load_preprocessed(self, data_files, idx_files, tensor_files):
 
