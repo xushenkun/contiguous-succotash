@@ -23,8 +23,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     prefix = 'poem'
+    word_is_char = True
 
-    batch_loader = BatchLoader('', prefix)
+    batch_loader = BatchLoader('', prefix, word_is_char)
     params = Parameters(batch_loader.max_word_len,
                         batch_loader.max_seq_len,
                         batch_loader.words_vocab_size,

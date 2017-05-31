@@ -9,7 +9,7 @@ from .functional import *
 
 
 class BatchLoader:
-    def __init__(self, path='../../', prefix=''):
+    def __init__(self, path='../../', prefix='', word_is_char=False):
 
         '''
             :properties
@@ -72,7 +72,9 @@ class BatchLoader:
                     encoder_word_input and encoder_character_input have reversed order of the words
                         in case of performance
         '''
-        prefix = prefix+'_' if prefix else '' 
+        self.prefix = prefix+'_' if prefix else '' 
+        self.word_is_char = word_is_char
+
         self.data_files = [path + 'data/' + prefix + 'train.txt',
                            path + 'data/' + prefix + 'test.txt']
 
@@ -147,7 +149,7 @@ class BatchLoader:
         # unique characters with blind symbol
         chars = list(set(data)) + [self.blind_symbol, self.pad_token, self.go_token, self.end_token]
         chars_vocab_size = len(chars)
-
+        print('chars_vocab_size:' + chars_vocab_size)
         # mappings itself
         idx_to_char = chars
         char_to_idx = {x: i for i, x in enumerate(idx_to_char)}
@@ -164,7 +166,7 @@ class BatchLoader:
         idx_to_word = list(sorted(idx_to_word)) + [self.pad_token, self.go_token, self.end_token]
 
         words_vocab_size = len(idx_to_word)
-
+        print('words_vocab_size:' + words_vocab_size)
         # Mapping from word to index
         word_to_idx = {x: i for i, x in enumerate(idx_to_word)}
 
@@ -180,8 +182,8 @@ class BatchLoader:
         with open(idx_files[1], 'wb') as f:
             cPickle.dump(self.idx_to_char, f)
 
-        data_words = [[line.split() for line in target.split('\n')] for target in data]
-        merged_data_words = merged_data.split()
+        data_words = [[(line if self.word_is_char else line.split()) for line in target.split('\n')] for target in data]
+        merged_data_words = merged_data if self.word_is_char else merged_data.split()
 
         self.words_vocab_size, self.idx_to_word, self.word_to_idx = self.build_word_vocab(merged_data_words)
         self.max_word_len = np.amax([len(word) for word in self.idx_to_word])
@@ -203,6 +205,7 @@ class BatchLoader:
             np.save(path, self.character_tensor[i])
 
         self.just_words = [word for line in self.word_tensor[0] for word in line]
+        print('just_words:' + len(self.just_words))
 
     def load_preprocessed(self, data_files, idx_files, tensor_files):
 
