@@ -14,12 +14,12 @@ from utils.functional import kld_coef, parameters_allocation_check, fold
 
 
 class RVAE_dilated(nn.Module):
-    def __init__(self, params):
+    def __init__(self, params, prefix=''):
         super(RVAE_dilated, self).__init__()
 
         self.params = params
 
-        self.embedding = Embedding(self.params, '')
+        self.embedding = Embedding(self.params, '', prefix)
 
         self.encoder = Encoder(self.params)
 

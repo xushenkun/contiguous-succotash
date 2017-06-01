@@ -7,12 +7,12 @@ from .tdnn import TDNN
 
 
 class Embedding(nn.Module):
-    def __init__(self, params, path='../../../'):
+    def __init__(self, params, path='../../../', prefix=''):
         super(Embedding, self).__init__()
 
         self.params = params
 
-        word_embed = np.load(path + 'data/word_embeddings.npy')
+        word_embed = np.load(path + 'data/' + prefix + 'word_embeddings.npy')
 
         self.word_embed = nn.Embedding(self.params.word_vocab_size, self.params.word_embed_size)
         self.char_embed = nn.Embedding(self.params.char_vocab_size, self.params.char_embed_size)

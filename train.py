@@ -44,7 +44,7 @@ if __name__ == "__main__":
                             batch_loader.words_vocab_size,
                             batch_loader.chars_vocab_size)
 
-    rvae = RVAE_dilated(parameters)
+    rvae = RVAE_dilated(parameters, batch_loader.prefix)
     if args.use_trained:
         rvae.load_state_dict(t.load(batch_loader.prefix+'trained_RVAE'))
     if args.use_cuda and t.cuda.is_available():
