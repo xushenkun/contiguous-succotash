@@ -11,13 +11,13 @@ if __name__ == "__main__":
     prefix = 'poem'
     word_is_char = True 
 
-    batch_loader = BatchLoader('../../', prefix, word_is_char)
+    batch_loader = BatchLoader('', prefix, word_is_char)
 
-    if not os.path.exists('../../data/' + batch_loader.prefix + 'word_embeddings.npy'):
+    if not os.path.exists('data/' + batch_loader.prefix + 'word_embeddings.npy'):
         raise FileNotFoundError("word embeddings file was't found")
 
     pca = PCA(n_components=2)
-    word_embeddings = np.load('../../data/' + batch_loader.prefix + 'word_embeddings.npy')
+    word_embeddings = np.load('data/' + batch_loader.prefix + 'word_embeddings.npy')
     word_embeddings_pca = pca.fit_transform(word_embeddings)
        
     words = batch_loader.idx_to_word
