@@ -4,6 +4,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
+from matplotlib.font_manager import FontProperties
 import numpy as np
 from sklearn.decomposition import PCA
 
@@ -25,6 +26,8 @@ if __name__ == "__main__":
        
     words = batch_loader.idx_to_word
 
+    font = FontProperties(fname=r"./utils/simsun.ttc", size=12)
+
     fig, ax = plt.subplots()
     fig.set_size_inches(150, 150)
     x = word_embeddings_pca[:, 0]
@@ -32,6 +35,6 @@ if __name__ == "__main__":
     ax.scatter(x, y)
 
     for i, word in enumerate(words):
-        ax.annotate(word, (x[i], y[i]))
+        ax.annotate(word, (x[i], y[i]), fontproperties=font)
 
     fig.savefig(batch_loader.prefix+'word_embedding.png', dpi=100)
