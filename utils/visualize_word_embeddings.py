@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.decomposition import PCA
 
-from utils.batch_loader import BatchLoader
+from batch_loader import BatchLoader
 
 if __name__ == "__main__":
 
