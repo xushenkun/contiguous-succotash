@@ -9,10 +9,7 @@ from utils.batch_loader import BatchLoader
 from utils.parameters import Parameters
 from model.rvae_dilated import RVAE_dilated
 
-if __name__ == "__main__":
-
-    if not os.path.exists('data/word_embeddings.npy'):
-        raise FileNotFoundError("word embeddings file was't found")
+if __name__ == "__main__":    
 
     parser = argparse.ArgumentParser(description='RVAE_dilated')
     parser.add_argument('--num-iterations', type=int, default=25000, metavar='NI',
@@ -34,7 +31,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    batch_loader = BatchLoader('')
+    prefix = 'poem'
+    word_is_char = True
+
+    batch_loader = BatchLoader('', prefix, word_is_char)
+
+    if not os.path.exists('data/' + batch_loader.prefix+ + 'word_embeddings.npy'):
+        raise FileNotFoundError("word embeddings file was't found")
+
     parameters = Parameters(batch_loader.max_word_len,
                             batch_loader.max_seq_len,
                             batch_loader.words_vocab_size,
@@ -42,8 +46,8 @@ if __name__ == "__main__":
 
     rvae = RVAE_dilated(parameters)
     if args.use_trained:
-        rvae.load_state_dict(t.load('trained_RVAE'))
-    if args.use_cuda:
+        rvae.load_state_dict(t.load(batch_loader.prefix+'trained_RVAE'))
+    if args.use_cuda and t.cuda.is_available():
         rvae = rvae.cuda()
 
     optimizer = Adam(rvae.learnable_parameters(), args.learning_rate)
@@ -56,7 +60,7 @@ if __name__ == "__main__":
 
     for iteration in range(args.num_iterations):
 
-        ppl, kld = train_step(iteration, args.batch_size, args.use_cuda, args.dropout)
+        ppl, kld = train_step(iteration, args.batch_size, args.use_cuda and t.cuda.is_available(), args.dropout)
 
         if iteration % 10 == 0:
             print('\n')
@@ -70,7 +74,7 @@ if __name__ == "__main__":
             print('------------------------------')
 
         if iteration % 10 == 0:
-            ppl, kld = validate(args.batch_size, args.use_cuda)
+            ppl, kld = validate(args.batch_size, args.use_cuda and t.cuda.is_available())
 
             ppl = ppl.data.cpu().numpy()[0]
             kld = kld.data.cpu().numpy()[0]
@@ -89,14 +93,14 @@ if __name__ == "__main__":
         if iteration % 20 == 0:
             seed = np.random.normal(size=[1, parameters.latent_variable_size])
 
-            sample = rvae.sample(batch_loader, 50, seed, args.use_cuda)
+            sample = rvae.sample(batch_loader, 50, seed, args.use_cuda and t.cuda.is_available())
 
             print('\n')
             print('------------SAMPLE------------')
             print(sample)
             print('------------------------------')
 
-    t.save(rvae.state_dict(), 'trained_RVAE')
+    t.save(rvae.state_dict(), batch_loader.prefix+'trained_RVAE')
 
-    np.save('ppl_result_{}.npy'.format(args.ppl_result), np.array(ppl_result))
-    np.save('kld_result_npy_{}'.format(args.kld_result), np.array(kld_result))
+    np.save(batch_loader.prefix+'ppl_result_{}.npy'.format(args.ppl_result), np.array(ppl_result))
+    np.save(batch_loader.prefix+'kld_result_npy_{}'.format(args.kld_result), np.array(kld_result))

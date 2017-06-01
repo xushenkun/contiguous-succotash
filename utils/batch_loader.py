@@ -210,13 +210,16 @@ class BatchLoader:
     def load_preprocessed(self, data_files, idx_files, tensor_files):
 
         data = [open(file, "r").read() for file in data_files]
-        data_words = [[line.split() for line in target.split('\n')] for target in data]
+        data_words = [[(line if self.word_is_char else line.split()) for line in target.split('\n')] for target in data]
         self.max_seq_len = np.amax([len(line) for target in data_words for line in target])
         self.num_lines = [len(target) for target in data_words]
 
         [self.idx_to_word, self.idx_to_char] = [cPickle.load(open(file, "rb")) for file in idx_files]
 
         [self.words_vocab_size, self.chars_vocab_size] = [len(idx) for idx in [self.idx_to_word, self.idx_to_char]]
+
+        print('chars_vocab_size:%s'%self.chars_vocab_size)
+        print('words_vocab_size:%s'%self.words_vocab_size)
 
         [self.word_to_idx, self.char_to_idx] = [dict(zip(idx, range(len(idx)))) for idx in
                                                 [self.idx_to_word, self.idx_to_char]]
@@ -225,8 +228,11 @@ class BatchLoader:
 
         [self.word_tensor, self.character_tensor] = [np.array([np.load(target) for target in input_type])
                                                      for input_type in tensor_files]
+                                                     
+        print(self.word_tensor.shape)
 
         self.just_words = [word for line in self.word_tensor[0] for word in line]
+        print('just_words:%s'%len(self.just_words))
 
     def next_batch(self, batch_size, target_str):
         target = 0 if target_str == 'train' else 1
