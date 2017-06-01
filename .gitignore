@@ -9,15 +9,15 @@ experimentation.py
 **/__pycache__
 *.so
 
-word_embedding.png
-characters_vocab.pkl
-valid_character_tensor.npy
-train_character_tensor.npy
-word_embeddings.npy
-train_word_tensor.npy
-valid_word_tensor.npy
-words_vocab.pkl
-trained_RVAE
+*word_embedding.png
+*characters_vocab.pkl
+*valid_character_tensor.npy
+*train_character_tensor.npy
+*word_embeddings.npy
+*train_word_tensor.npy
+*valid_word_tensor.npy
+*words_vocab.pkl
+*trained_RVAE
 
 # Distribution / packaging
 .Python
