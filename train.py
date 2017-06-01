@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
     batch_loader = BatchLoader('', prefix, word_is_char)
 
-    if not os.path.exists('data/' + batch_loader.prefix+ + 'word_embeddings.npy'):
+    if not os.path.exists('data/' + batch_loader.prefix + 'word_embeddings.npy'):
         raise FileNotFoundError("word embeddings file was't found")
 
     parameters = Parameters(batch_loader.max_word_len,
