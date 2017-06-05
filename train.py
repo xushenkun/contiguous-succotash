@@ -42,7 +42,7 @@ if __name__ == "__main__":
     parameters = Parameters(batch_loader.max_word_len,
                             batch_loader.max_seq_len,
                             batch_loader.words_vocab_size,
-                            batch_loader.chars_vocab_size)
+                            batch_loader.chars_vocab_size, word_is_char)
 
     rvae = RVAE_dilated(parameters, batch_loader.prefix)
     if args.use_trained:

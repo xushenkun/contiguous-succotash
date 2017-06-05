@@ -50,11 +50,12 @@ class RVAE_dilated(nn.Module):
             'Invalid CUDA options. Parameters should be allocated in the same memory'
         use_cuda = self.embedding.word_embed.weight.is_cuda
 
-        assert z is None and fold(lambda acc, parameter: acc and parameter is not None,
-                                  [encoder_word_input, encoder_character_input, decoder_word_input],
-                                  True) \
-               or (z is not None and decoder_word_input is not None), \
-            "Invalid input. If z is None then encoder and decoder inputs should be passed as arguments"
+        if not self.params.word_is_char:
+            assert z is None and fold(lambda acc, parameter: acc and parameter is not None,
+                                      [encoder_word_input, encoder_character_input, decoder_word_input],
+                                      True) \
+                   or (z is not None and decoder_word_input is not None), \
+                "Invalid input. If z is None then encoder and decoder inputs should be passed as arguments"
 
         if z is None:
             ''' Get context from encoder and sample z ~ N(mu, std)
@@ -94,9 +95,9 @@ class RVAE_dilated(nn.Module):
 
         def train(i, batch_size, use_cuda, dropout):
             input = batch_loader.next_batch(batch_size, 'train')
-            input = [Variable(t.from_numpy(var)) for var in input]
-            input = [var.long() for var in input]
-            input = [var.cuda() if use_cuda else var for var in input]
+            input = [(Variable(t.from_numpy(var)) if var else None) for var in input]
+            input = [(var.long() if var else None) for var in input]
+            input = [(var.cuda() if var and use_cuda else var) for var in input]
 
             [encoder_word_input, encoder_character_input, decoder_word_input, _, target] = input
 
@@ -129,9 +130,9 @@ class RVAE_dilated(nn.Module):
 
         def validate(batch_size, use_cuda):
             input = batch_loader.next_batch(batch_size, 'valid')
-            input = [Variable(t.from_numpy(var)) for var in input]
-            input = [var.long() for var in input]
-            input = [var.cuda() if use_cuda else var for var in input]
+            input = [Variable(t.from_numpy(var)) if var else None for var in input]
+            input = [var.long() if var else None for var in input]
+            input = [var.cuda() if use_cuda and var else var for var in input]
 
             [encoder_word_input, encoder_character_input, decoder_word_input, _, target] = input
 

@@ -12,9 +12,11 @@ class Encoder(nn.Module):
 
         self.params = params
 
-        self.hw1 = Highway(self.params.sum_depth + self.params.word_embed_size, 2, F.relu)
+        isize = (self.params.sum_depth + self.params.word_embed_size) if not self.params.word_is_char else self.params.word_embed_size
 
-        self.rnn = nn.LSTM(input_size=self.params.word_embed_size + self.params.sum_depth,
+        self.hw1 = Highway(isize, 2, F.relu)
+
+        self.rnn = nn.LSTM(input_size=isize,
                            hidden_size=self.params.encoder_rnn_size,
                            num_layers=self.params.encoder_num_layers,
                            batch_first=True,

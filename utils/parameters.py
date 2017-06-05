@@ -2,7 +2,7 @@ from .functional import *
 
 
 class Parameters:
-    def __init__(self, max_word_len, max_seq_len, word_vocab_size, char_vocab_size):
+    def __init__(self, max_word_len, max_seq_len, word_vocab_size, char_vocab_size, word_is_char):
 
         self.max_word_len = int(max_word_len)
         self.max_seq_len = int(
@@ -33,6 +33,8 @@ class Parameters:
         '''
         self.decoder_paddings = [Parameters.effective_k(w, self.decoder_dilations[i]) - 1
                                  for i, (_, _, w) in enumerate(self.decoder_kernels)]
+
+        self.word_is_char = word_is_char
 
     @staticmethod
     def effective_k(k, d):
