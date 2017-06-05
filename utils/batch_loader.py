@@ -178,6 +178,8 @@ class BatchLoader:
             self.chars_vocab_size, self.idx_to_char, self.char_to_idx = self.build_character_vocab(merged_data)
             with open(idx_files[1], 'wb') as f:
                 cPickle.dump(self.idx_to_char, f)
+        else:
+            self.chars_vocab_size = None
 
         data_words = [[(line if self.word_is_char else line.split()) for line in target.split('\n')] for target in data]
         merged_data_words = merged_data if self.word_is_char else merged_data.split()
@@ -219,9 +221,10 @@ class BatchLoader:
             [self.word_tensor, self.character_tensor] = [np.array([np.load(target) for target in input_type])
                                                      for input_type in tensor_files]
         else:
+            self.chars_vocab_size = None
             self.idx_to_word = cPickle.load(open(idx_files[0], "rb"))
             self.words_vocab_size = len(self.idx_to_word)
-            self.word_to_idx = dict(zip(idx, range(len(self.idx_to_word))))
+            self.word_to_idx = dict(zip(self.idx_to_word, range(len(self.idx_to_word))))
             self.word_tensor = np.array([np.load(target) for target in tensor_files[0]])
         print('words_vocab_size:%s'%self.words_vocab_size)        
 

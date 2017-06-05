@@ -95,9 +95,9 @@ class RVAE_dilated(nn.Module):
 
         def train(i, batch_size, use_cuda, dropout):
             input = batch_loader.next_batch(batch_size, 'train')
-            input = [(Variable(t.from_numpy(var)) if var else None) for var in input]
-            input = [(var.long() if var else None) for var in input]
-            input = [(var.cuda() if var and use_cuda else var) for var in input]
+            input = [(Variable(t.from_numpy(var)) if var is not None else None) for var in input]
+            input = [(var.long() if var is not None else None) for var in input]
+            input = [(var.cuda() if var is not None and use_cuda else var) for var in input]
 
             [encoder_word_input, encoder_character_input, decoder_word_input, _, target] = input
 
@@ -130,9 +130,9 @@ class RVAE_dilated(nn.Module):
 
         def validate(batch_size, use_cuda):
             input = batch_loader.next_batch(batch_size, 'valid')
-            input = [Variable(t.from_numpy(var)) if var else None for var in input]
-            input = [var.long() if var else None for var in input]
-            input = [var.cuda() if use_cuda and var else var for var in input]
+            input = [Variable(t.from_numpy(var)) if var is not None else None for var in input]
+            input = [var.long() if var is not None else None for var in input]
+            input = [var.cuda() if use_cuda and var is not None else var for var in input]
 
             [encoder_word_input, encoder_character_input, decoder_word_input, _, target] = input
 

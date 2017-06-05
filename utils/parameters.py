@@ -9,7 +9,7 @@ class Parameters:
             max_seq_len) + 1  # go or eos token
 
         self.word_vocab_size = int(word_vocab_size)
-        self.char_vocab_size = int(char_vocab_size)
+        self.char_vocab_size = int(char_vocab_size) if char_vocab_size else 0
 
         self.word_embed_size = 300
         self.char_embed_size = 15
