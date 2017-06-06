@@ -28,6 +28,17 @@ class RVAE_dilated(nn.Module):
 
         self.decoder = Decoder(self.params)
 
+        params_size = 0
+        params_num = 0
+        for p in self.parameters():
+            param_size = 1
+            for s in p.size():
+                param_size = param_size * s
+            if p.requires_grad: params_size = params_size + param_size
+            if p.requires_grad: params_num = params_num + 1
+            if p.requires_grad: print('Grad Param', type(p.data), p.size())
+        print('RVAE parameters num[%s] size[%s]'%(params_num, params_size))
+
     def forward(self, drop_prob,
                 encoder_word_input=None, encoder_character_input=None,
                 decoder_word_input=None,
@@ -120,7 +131,7 @@ class RVAE_dilated(nn.Module):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+            #del loss, encoder_word_input, target
             return ppl, kld
 
         return train
@@ -142,7 +153,7 @@ class RVAE_dilated(nn.Module):
                                z=None)
 
             ppl = perplexity(logits, target).mean()
-
+            #del encoder_word_input, target
             return ppl, kld
 
         return validate

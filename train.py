@@ -61,16 +61,17 @@ if __name__ == "__main__":
     for iteration in range(args.num_iterations):
 
         ppl, kld = train_step(iteration, args.batch_size, args.use_cuda and t.cuda.is_available(), args.dropout)
-
+        train_ppl = ppl.data.cpu().numpy()[0]
+        train_kld = kld.data.cpu().numpy()[0]
         if iteration % 10 == 0:
             print('\n')
             print('------------TRAIN-------------')
             print('----------ITERATION-----------')
             print(iteration)
-            print('---------PERPLEXITY-----------')
-            print(ppl.data.cpu().numpy()[0])
-            print('-------------KLD--------------')
-            print(kld.data.cpu().numpy()[0])
+            print('---------PERPLEXITY-----------')            
+            print(train_ppl)
+            print('-------------KLD--------------')            
+            print(train_kld)
             print('------------------------------')
 
         if iteration % 10 == 0:
@@ -89,7 +90,7 @@ if __name__ == "__main__":
 
             ppl_result += [ppl]
             kld_result += [kld]
-
+        print('----------ITERATION-----------%s: train_ppl[%s] train_kld[%s]'%(iteration, train_ppl, train_kld))
         if iteration % 20 == 0:
             seed = np.random.normal(size=[1, parameters.latent_variable_size])
 
