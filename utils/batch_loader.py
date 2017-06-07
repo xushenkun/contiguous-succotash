@@ -11,7 +11,7 @@ from .functional import *
 
 
 class BatchLoader:
-    def __init__(self, path='../../', prefix='', word_is_char=False):
+    def __init__(self, path='../../', prefix='', word_is_char=False, gen_tensors=False):
 
         '''
             :properties
@@ -98,11 +98,10 @@ class BatchLoader:
                               [os.path.exists(file) for target in self.tensor_files
                                for file in target],
                               True)
-
-        if idx_exists and tensors_exists:
+        if idx_exists and (gen_tensors or tensors_exists):
             self.load_preprocessed(self.data_files,
                                    self.idx_files,
-                                   self.tensor_files)
+                                   self.tensor_files, gen_tensors)
             print('preprocessed data was found and loaded')
         else:
             self.preprocess(self.data_files,
@@ -209,7 +208,7 @@ class BatchLoader:
         self.just_words = [word for line in self.word_tensor[0] for word in line]
         print('just_words:%s'%len(self.just_words))
 
-    def load_preprocessed(self, data_files, idx_files, tensor_files):
+    def load_preprocessed(self, data_files, idx_files, tensor_files, gen_tensors=False):
 
         data = [open(file, "r").read() for file in data_files]
         data_words = [[(line if self.word_is_char else line.split()) for line in target.split('\n')] for target in data]
@@ -220,14 +219,29 @@ class BatchLoader:
             [self.words_vocab_size, self.chars_vocab_size] = [len(idx) for idx in [self.idx_to_word, self.idx_to_char]]
             print('chars_vocab_size:%s'%self.chars_vocab_size)
             [self.word_to_idx, self.char_to_idx] = [dict(zip(idx, range(len(idx)))) for idx in [self.idx_to_word, self.idx_to_char]]
-            [self.word_tensor, self.character_tensor] = [np.array([np.load(target) for target in input_type])
+            if not gen_tensors:
+                [self.word_tensor, self.character_tensor] = [np.array([np.load(target) for target in input_type])
                                                      for input_type in tensor_files]
+            else:
+                self.word_tensor = np.array([[list(map(self.word_to_idx.get, line)) for line in target] for target in data_words])
+                print(self.word_tensor.shape)
+                for i, path in enumerate(tensor_files[0]):
+                    np.save(path, self.word_tensor[i])
+                self.character_tensor = np.array([[list(map(self.encode_characters, line)) for line in target] for target in data_words])
+                for i, path in enumerate(tensor_files[1]):
+                    np.save(path, self.character_tensor[i])
         else:
             self.chars_vocab_size = None
             self.idx_to_word = cPickle.load(open(idx_files[0], "rb"))
             self.words_vocab_size = len(self.idx_to_word)
             self.word_to_idx = dict(zip(self.idx_to_word, range(len(self.idx_to_word))))
-            self.word_tensor = np.array([np.load(target) for target in tensor_files[0]])
+            if not gen_tensors:
+                self.word_tensor = np.array([np.load(target) for target in tensor_files[0]])
+            else:
+                self.word_tensor = np.array([[list(map(self.word_to_idx.get, line)) for line in target] for target in data_words])
+                print(self.word_tensor.shape)
+                for i, path in enumerate(tensor_files[0]):
+                    np.save(path, self.word_tensor[i])
         print('words_vocab_size:%s'%self.words_vocab_size)        
 
         self.max_word_len = np.amax([len(word) for word in self.idx_to_word])        
@@ -344,36 +358,3 @@ class BatchLoader:
     def decode_characters(self, characters_idx):
         characters = [self.idx_to_char[i] for i in characters_idx]
         return ''.join(characters)
-
-
-def split_corpus_line(line, max_seq_len=200, seg_char=u'。', seg_len=4):
-    lines = []
-    if len(line) <= max_seq_len:
-        return line
-    else:
-        segs = line.split(seg_char)
-        cur = []
-        for i,seg in enumerate(segs):            
-            if i!=0 and i%seg_len==0:
-                if len(cur) > 0:
-                    lines.append(cur)
-                cur =[]
-            cur.append(seg)
-        length = len(lines)
-        if length >= 2:
-            if len(lines[-1]) < seg_len:
-                lines[-2] = lines[-2] + lines[-1]
-                lines = lines[0:-1]
-        return '\n'.join([u'。'.join(line)+u'。' for line in lines])
-
-if __name__ == '__main__':
-    import codecs
-    filename='poem_test.txt'
-    with codecs.open('../data/'+filename, "r", encoding="utf-8") as fi:
-        data = fi.read()
-    lines = data.split('\n')
-    new_lines = []
-    for line in lines:
-        new_lines.append(split_corpus_line(line))
-    with codecs.open('../data/'+filename+'.ok', "w", encoding="utf-8") as fo:
-        fo.write('\n'.join(new_lines))
