@@ -9,7 +9,7 @@ from six.moves import cPickle
 
 from utils.batch_loader import BatchLoader
 
-def split_corpus_line(line, max_seq_len=200, seg_char=u'。', seg_len=4):
+def split_corpus_line(line, max_seq_len=100, seg_char=u'。', seg_len=4):
     lines = []
     if len(line) <= max_seq_len:
         return line
@@ -44,8 +44,11 @@ def generate_tensor_file(prefix, word_is_char, gen_tensors):
     batch_loader = BatchLoader('', prefix, word_is_char, gen_tensors)
 
 if __name__ == '__main__':
-    #filename='poem_test.txt'
+    #filename='poem_test_ori.txt'
     #reduce_seq_len(filename)
+    #filename='poem_train_ori.txt'
+    #reduce_seq_len(filename)
+
     prefix = 'poem'
     word_is_char = True
     gen_tensors = True
