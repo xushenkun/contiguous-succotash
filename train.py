@@ -13,10 +13,10 @@ from model.rvae_dilated import RVAE_dilated
 if __name__ == "__main__":    
 
     parser = argparse.ArgumentParser(description='RVAE_dilated')
-    parser.add_argument('--num-epochs', type=int, default=25000, metavar='NI',
+    parser.add_argument('--num-epochs', type=int, default=25000, metavar='ES',
                         help='num epochs (default: 25000)')
-    parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
-                    help='manual epoch number (useful on restarts)')
+    parser.add_argument('--start-epoch', default=0, type=int, metavar='E',
+                    help='manual epoch index (useful on restarts)')
     parser.add_argument('--batch-size', type=int, default=45, metavar='BS',
                         help='batch size (default: 45)')
     parser.add_argument('--use-cuda', type=bool, default=True, metavar='CUDA',

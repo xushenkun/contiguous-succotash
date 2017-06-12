@@ -94,7 +94,7 @@ class RVAE_dilated(nn.Module):
         decoder_input = self.embedding.word_embed(decoder_word_input)
         out = self.decoder(decoder_input, z, drop_prob)
 
-        return out, kld
+        return out, kld, z
 
     def learnable_parameters(self):
 
@@ -112,7 +112,7 @@ class RVAE_dilated(nn.Module):
 
             [encoder_word_input, encoder_character_input, decoder_word_input, _, target] = input
 
-            logits, kld = self(dropout,
+            logits, kld, _ = self(dropout,
                                encoder_word_input, encoder_character_input,
                                decoder_word_input,
                                z=None)
@@ -147,7 +147,7 @@ class RVAE_dilated(nn.Module):
 
             [encoder_word_input, encoder_character_input, decoder_word_input, _, target] = input
 
-            logits, kld = self(0.,
+            logits, kld, _ = self(0.,
                                encoder_word_input, encoder_character_input,
                                decoder_word_input,
                                z=None)
@@ -158,7 +158,28 @@ class RVAE_dilated(nn.Module):
 
         return validate
 
-    def sample(self, batch_loader, seq_len, seed, use_cuda):
+    def style(self, batch_loader, seq, use_cuda):
+        decoder_word_input_np, _ = batch_loader.go_input(1)
+        encoder_word_input_np = [[]]
+        for i in range(len(seq)):
+            word = seq[i]
+            word = np.array([[batch_loader.word_to_idx[word]]])
+            decoder_word_input_np = np.append(decoder_word_input_np, word, 1)
+            encoder_word_input_np = np.append(encoder_word_input_np, word, 1)
+        decoder_word_input = Variable(t.from_numpy(decoder_word_input_np).long())
+        encoder_word_input = Variable(t.from_numpy(encoder_word_input_np).long())
+        if use_cuda:
+            decoder_word_input = decoder_word_input.cuda()
+            encoder_word_input = encoder_word_input.cuda()
+        if self.params.word_is_char:   #TODO only for chinese word right now
+            logits, kld, z = self(0.,
+                               encoder_word_input, None, 
+                               decoder_word_input,
+                               z=None)
+            return z.data.cpu().numpy()
+        return None
+
+    def sample(self, batch_loader, seq_len, seed, use_cuda, template=None):
         seed = Variable(t.from_numpy(seed).float())
         if use_cuda:
             seed = seed.cuda()
@@ -172,23 +193,26 @@ class RVAE_dilated(nn.Module):
         result = ''
 
         for i in range(seq_len):
-            logits, _ = self(0., None, None,
-                             decoder_word_input,
-                             seed)
+            if template and len(template) > i and template[i] != '#':
+                word = template[i]
+            else:
+                logits, _, _ = self(0., None, None,
+                                 decoder_word_input,
+                                 seed)
 
-            [_, sl, _] = logits.size()
+                [_, sl, _] = logits.size()
 
-            logits = logits.view(-1, self.params.word_vocab_size)
-            prediction = F.softmax(logits)
-            prediction = prediction.view(1, sl, -1)
+                logits = logits.view(-1, self.params.word_vocab_size)
+                prediction = F.softmax(logits)
+                prediction = prediction.view(1, sl, -1)
 
-            # take the last word from prefiction and append it to result
-            word = batch_loader.sample_word_from_distribution(prediction.data.cpu().numpy()[0, -1])
+                # take the last word from prefiction and append it to result
+                word = batch_loader.sample_word_from_distribution(prediction.data.cpu().numpy()[0, -1])
 
             if word == batch_loader.end_token:
                 break
 
-            result += ' ' + word
+            result += ('' if self.params.word_is_char else ' ') + word
 
             word = np.array([[batch_loader.word_to_idx[word]]])
 
