@@ -36,7 +36,7 @@ class RVAE_dilated(nn.Module):
                 param_size = param_size * s
             if p.requires_grad: params_size = params_size + param_size
             if p.requires_grad: params_num = params_num + 1
-            if p.requires_grad: print('Grad Param', type(p.data), p.size())
+            #if p.requires_grad: print('Grad Param', type(p.data), p.size())
         print('RVAE parameters num[%s] size[%s]'%(params_num, params_size))
 
     def forward(self, drop_prob,
@@ -158,19 +158,21 @@ class RVAE_dilated(nn.Module):
 
         return validate
 
-    def style(self, batch_loader, seq, use_cuda):
+    def style(self, batch_loader, seq, use_cuda, sample_size=30):
         decoder_word_input_np, _ = batch_loader.go_input(1)
         encoder_word_input_np = [[]]
         for i in range(len(seq)):
             word = seq[i]
             word = np.array([[batch_loader.word_to_idx[word]]])
             decoder_word_input_np = np.append(decoder_word_input_np, word, 1)
-            encoder_word_input_np = np.append(encoder_word_input_np, word, 1)
+            encoder_word_input_np = np.append(encoder_word_input_np, word, 1)        
         decoder_word_input = Variable(t.from_numpy(decoder_word_input_np).long())
         encoder_word_input = Variable(t.from_numpy(encoder_word_input_np).long())
+        decoder_word_input = t.cat([decoder_word_input]*sample_size, 0)
+        encoder_word_input = t.cat([encoder_word_input]*sample_size, 0) 
         if use_cuda:
             decoder_word_input = decoder_word_input.cuda()
-            encoder_word_input = encoder_word_input.cuda()
+            encoder_word_input = encoder_word_input.cuda()               
         if self.params.word_is_char:   #TODO only for chinese word right now
             logits, kld, z = self(0.,
                                encoder_word_input, None, 
@@ -179,47 +181,75 @@ class RVAE_dilated(nn.Module):
             return z.data.cpu().numpy()
         return None
 
-    def sample(self, batch_loader, seq_len, seed, use_cuda, template=None):
-        seed = Variable(t.from_numpy(seed).float())
-        if use_cuda:
-            seed = seed.cuda()
-
-        decoder_word_input_np, _ = batch_loader.go_input(1)
-        decoder_word_input = Variable(t.from_numpy(decoder_word_input_np).long())
-
-        if use_cuda:
-            decoder_word_input = decoder_word_input.cuda()
-
-        result = ''
+    def sample(self, batch_loader, seq_len, seeds, use_cuda, template=None, beam_size=50):
+        (z_num, _) = seeds.shape
+        print("z sample size", z_num, "beam size", beam_size)
+        beam_sent_wids, _ = batch_loader.go_input(1)
+        results = []
+        end_token_id = batch_loader.word_to_idx[batch_loader.end_token]
 
         for i in range(seq_len):
+            beam_sent_num = len(beam_sent_wids)
+            if beam_sent_num == 0:
+                break
+            if len(results) >= beam_size:
+                break
+            beam_sent_wids = np.repeat(beam_sent_wids, [z_num], axis=0) if z_num > 1 else beam_sent_wids
+            decoder_word_input = Variable(t.from_numpy(beam_sent_wids).long())
+            decoder_word_input = decoder_word_input.cuda() if use_cuda else decoder_word_input
+            beam_seeds = Variable(t.from_numpy(seeds).float())
+            beam_seeds = t.cat([beam_seeds]*beam_sent_num, 0) if beam_sent_num > 1 else beam_seeds
+            beam_seeds = beam_seeds.cuda() if use_cuda else beam_seeds
+
+            beam_sent_wids = decoder_word_input.view(beam_sent_num, z_num, -1).data.cpu().numpy()[:,0]
+            beam_sent_logps = None
             if template and len(template) > i and template[i] != '#':
-                word = template[i]
+                beam_sent_wids = np.column_stack((beam_sent_wids, [batch_loader.word_to_idx[template[i]]]*beam_sent_num))
             else:
                 logits, _, _ = self(0., None, None,
                                  decoder_word_input,
-                                 seed)
-
-                [_, sl, _] = logits.size()
-
+                                 beam_seeds)
+                [b_z_n, sl, _] = logits.size()
                 logits = logits.view(-1, self.params.word_vocab_size)
                 prediction = F.softmax(logits)
-                prediction = prediction.view(1, sl, -1)
+                prediction = prediction.view(beam_sent_num, z_num, sl, -1)
+                # take mean of sentence vocab probs for each beam group
+                beam_sent_vps = np.mean(prediction.data.cpu().numpy(), 1)
+                # get vocab probs of the sentence last word for each beam group
+                beam_last_vps = beam_sent_vps[:,-1]
+                beam_last_word_size = min(batch_loader.words_vocab_size, beam_size)
+                # choose last word candidate ids for each beam group
+                beam_choosed_wids = np.array([np.random.choice(range(batch_loader.words_vocab_size), beam_last_word_size, replace=False, p=last_vps.ravel()).tolist() for last_vps in beam_last_vps])
+                # dumplicate beam sentence word ids for choosed last word size
+                beam_sent_wids = np.repeat(beam_sent_wids, [beam_last_word_size], axis=0)
+                beam_sent_wids = np.column_stack((beam_sent_wids, beam_choosed_wids.reshape(-1)))
+                # get sentence word probs
+                beam_sent_wps = []
+                for i, sent in enumerate(beam_sent_wids):
+                    beam_sent_wps.append([])
+                    for j, wid in enumerate(sent[1:]):
+                        beam_sent_wps[i].append(beam_sent_vps[i//beam_last_word_size][j][wid])
+                # desc sort sum of the beam sentence log probs
+                beam_sent_logps = np.sum(np.log(beam_sent_wps), axis=1)
+                beam_sent_ids = np.argsort(beam_sent_logps)[-(beam_size-len(results)):][::-1]                
+                # get the top beam size sentences
+                beam_sent_wids = beam_sent_wids[beam_sent_ids]
+                beam_sent_logps = beam_sent_logps[beam_sent_ids]
+            # check whether some sentence is ended
+            keep = []
+            for i, sent in enumerate(beam_sent_wids):
+                if sent[-1] == end_token_id:
+                    results.append(sent)
+                    self.show(batch_loader, sent, beam_sent_logps[i] if beam_sent_logps is not None and len(beam_sent_logps)>i else None)
+                else:
+                    keep.append(i)
+            beam_sent_wids = beam_sent_wids[keep]
+        lack_num = beam_size - len(results)
+        if lack_num > 0:
+            results = results + beam_sent_wids[:lack_num].tolist()
+            for i, sent in enumerate(results[-lack_num:]):
+                self.show(batch_loader, sent, beam_sent_logps[i] if beam_sent_logps is not None and len(beam_sent_logps)>i else None)
+        return results
 
-                # take the last word from prefiction and append it to result
-                word = batch_loader.sample_word_from_distribution(prediction.data.cpu().numpy()[0, -1])
-
-            if word == batch_loader.end_token:
-                break
-
-            result += ('' if self.params.word_is_char else ' ') + word
-
-            word = np.array([[batch_loader.word_to_idx[word]]])
-
-            decoder_word_input_np = np.append(decoder_word_input_np, word, 1)
-            decoder_word_input = Variable(t.from_numpy(decoder_word_input_np).long())
-
-            if use_cuda:
-                decoder_word_input = decoder_word_input.cuda()
-
-        return result
+    def show(self, batch_loader, sent_wids, sent_logp):
+        print(u'%s==%s'%(("" if self.params.word_is_char else " ").join([batch_loader.idx_to_word[wid] for wid in sent_wids]), sent_logp))

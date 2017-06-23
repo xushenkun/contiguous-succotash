@@ -15,8 +15,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sampler')
     parser.add_argument('--use-cuda', type=bool, default=True, metavar='CUDA',
                         help='use cuda (default: True)')
-    parser.add_argument('--num-sample', type=int, default=10, metavar='NS',
-                        help='num samplings (default: 10)')
+    parser.add_argument('--beam-size', type=int, default=50, metavar='BS',
+                        help='beam search size (default: 50)')
+    parser.add_argument('--z-size', type=int, default=30, metavar='ZS',
+                        help='z sample size (default: 30)')
+    parser.add_argument('--seq-len', type=int, default=50, metavar='ZS',
+                        help='seq length (default: 50)')
     parser.add_argument('--use-trained', default='', metavar='UT',
                         help='load pretrained model (default: None)')
     args = parser.parse_args()
@@ -43,10 +47,9 @@ if __name__ == '__main__':
     if args.use_cuda and t.cuda.is_available():
         rvae = rvae.cuda()
 
-    for iteration in range(args.num_sample):
-        seed = np.random.normal(size=[1, parameters.latent_variable_size])
-        seed = rvae.style(batch_loader, u'床前看月光，疑是地上霜。举头望山月，低头思故乡。', args.use_cuda and t.cuda.is_available())
-        if seed is not None:
-            result = rvae.sample(batch_loader, 50, seed, args.use_cuda and t.cuda.is_available(), u'床####，疑####。举####，低####。')
-            print(result)
-            print()
+    seed = np.random.normal(size=[1, parameters.latent_variable_size])
+    seed = rvae.style(batch_loader, u'床前看月光，疑是地上霜。举头望山月，低头思故乡。', args.use_cuda and t.cuda.is_available(), sample_size=args.z_size)
+    if seed is not None:
+        result = rvae.sample(batch_loader, args.seq_len, seed, args.use_cuda and t.cuda.is_available(), u'床####，疑####。举####，低####。', args.beam_size)
+        print(result)
+        print()
