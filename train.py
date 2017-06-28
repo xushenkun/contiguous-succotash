@@ -88,7 +88,7 @@ if __name__ == "__main__":
 
         if epoch != 1 and epoch % 10 == 9:
             seed = np.random.normal(size=[1, parameters.latent_variable_size])
-            sample = rvae.sample(batch_loader, 50, seed, args.use_cuda and t.cuda.is_available())
+            sample = rvae.sample(batch_loader, 50, seed, args.use_cuda and t.cuda.is_available(), None, 1)
             print('[%s]---SAMPLE: %s'%(epoch, sample))
 
         if epoch != 0 and epoch % 100 == 99:

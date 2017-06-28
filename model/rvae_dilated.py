@@ -165,7 +165,8 @@ class RVAE_dilated(nn.Module):
             word = seq[i]
             word = np.array([[batch_loader.word_to_idx[word]]])
             decoder_word_input_np = np.append(decoder_word_input_np, word, 1)
-            encoder_word_input_np = np.append(encoder_word_input_np, word, 1)        
+            encoder_word_input_np = np.append(encoder_word_input_np, word, 1) 
+        encoder_word_input_np = encoder_word_input_np[:,::-1]       
         decoder_word_input = Variable(t.from_numpy(decoder_word_input_np).long())
         encoder_word_input = Variable(t.from_numpy(encoder_word_input_np).long())
         decoder_word_input = t.cat([decoder_word_input]*sample_size, 0)
@@ -194,14 +195,13 @@ class RVAE_dilated(nn.Module):
                 break
             if len(results) >= beam_size:
                 break
-            beam_sent_wids = np.repeat(beam_sent_wids, [z_num], axis=0) if z_num > 1 else beam_sent_wids
-            decoder_word_input = Variable(t.from_numpy(beam_sent_wids).long())
+            beam_z_sent_wids = np.repeat(beam_sent_wids, [z_num], axis=0) if z_num > 1 else beam_sent_wids
+            decoder_word_input = Variable(t.from_numpy(beam_z_sent_wids).long())
             decoder_word_input = decoder_word_input.cuda() if use_cuda else decoder_word_input
             beam_seeds = Variable(t.from_numpy(seeds).float())
             beam_seeds = t.cat([beam_seeds]*beam_sent_num, 0) if beam_sent_num > 1 else beam_seeds
             beam_seeds = beam_seeds.cuda() if use_cuda else beam_seeds
 
-            beam_sent_wids = decoder_word_input.view(beam_sent_num, z_num, -1).data.cpu().numpy()[:,0]
             beam_sent_logps = None
             if template and len(template) > i and template[i] != '#':
                 beam_sent_wids = np.column_stack((beam_sent_wids, [batch_loader.word_to_idx[template[i]]]*beam_sent_num))
@@ -234,7 +234,7 @@ class RVAE_dilated(nn.Module):
                 beam_sent_ids = np.argsort(beam_sent_logps)[-(beam_size-len(results)):][::-1]                
                 # get the top beam size sentences
                 beam_sent_wids = beam_sent_wids[beam_sent_ids]
-                beam_sent_logps = beam_sent_logps[beam_sent_ids]
+                beam_sent_logps = np.exp(beam_sent_logps[beam_sent_ids])
             # check whether some sentence is ended
             keep = []
             for i, sent in enumerate(beam_sent_wids):
