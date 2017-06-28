@@ -160,15 +160,17 @@ class RVAE_dilated(nn.Module):
 
     def style(self, batch_loader, seq, use_cuda, sample_size=30):
         decoder_word_input_np, _ = batch_loader.go_input(1)
-        encoder_word_input_np = [[]]
+        encoder_wids = []
         for i in range(len(seq)):
             word = seq[i]
-            word = np.array([[batch_loader.word_to_idx[word]]])
+            wid = batch_loader.word_to_idx[word]
+            word = np.array([[wid]])
             decoder_word_input_np = np.append(decoder_word_input_np, word, 1)
-            encoder_word_input_np = np.append(encoder_word_input_np, word, 1) 
-        encoder_word_input_np = encoder_word_input_np[:,::-1]       
-        decoder_word_input = Variable(t.from_numpy(decoder_word_input_np).long())
-        encoder_word_input = Variable(t.from_numpy(encoder_word_input_np).long())
+            encoder_wids.append(wid)
+        encoder_wids = encoder_wids[::-1]
+        encoder_word_input_np = np.array([encoder_wids])       
+        decoder_word_input = Variable(t.from_numpy(decoder_word_input_np)).long()
+        encoder_word_input = Variable(t.from_numpy(encoder_word_input_np)).long()
         decoder_word_input = t.cat([decoder_word_input]*sample_size, 0)
         encoder_word_input = t.cat([encoder_word_input]*sample_size, 0) 
         if use_cuda:
