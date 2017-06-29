@@ -246,11 +246,12 @@ class RVAE_dilated(nn.Module):
                 else:
                     keep.append(i)
             beam_sent_wids = beam_sent_wids[keep]
-        lack_num = beam_size - len(results)
+        results_len = len(results)
+        lack_num = beam_size - results_len
         if lack_num > 0:
             results = results + beam_sent_wids[:lack_num].tolist()
             for i, sent in enumerate(results[-lack_num:]):
-                self.show(batch_loader, sent, beam_sent_logps[i] if beam_sent_logps is not None and len(beam_sent_logps)>i else None)
+                self.show(batch_loader, sent, beam_sent_logps[i+results_len] if beam_sent_logps is not None and len(beam_sent_logps)>i+results_len else None)
         return results
 
     def show(self, batch_loader, sent_wids, sent_logp):
