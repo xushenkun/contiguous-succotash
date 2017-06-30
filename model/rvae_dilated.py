@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 from .decoder import Decoder
+from .decoder_gru import DecoderGRU
 from .encoder import Encoder
 
 from selfModules.embedding import Embedding
@@ -26,7 +27,10 @@ class RVAE_dilated(nn.Module):
         self.context_to_mu = nn.Linear(self.params.encoder_rnn_size * 2, self.params.latent_variable_size)
         self.context_to_logvar = nn.Linear(self.params.encoder_rnn_size * 2, self.params.latent_variable_size)
 
-        self.decoder = Decoder(self.params)
+        if self.params.decoder_type == 'gru':
+            self.decoder = DecoderGRU(self.params)
+        elif self.params.decoder_type == 'dilation':
+            self.decoder = Decoder(self.params)        
 
         params_size = 0
         params_num = 0
@@ -42,7 +46,7 @@ class RVAE_dilated(nn.Module):
     def forward(self, drop_prob,
                 encoder_word_input=None, encoder_character_input=None,
                 decoder_word_input=None,
-                z=None):
+                z=None, initial_state=None):
         """
         :param encoder_word_input: An tensor with shape of [batch_size, seq_len] of Long type
         :param encoder_character_input: An tensor with shape of [batch_size, seq_len, max_word_len] of Long type
@@ -92,9 +96,9 @@ class RVAE_dilated(nn.Module):
             kld = None
 
         decoder_input = self.embedding.word_embed(decoder_word_input)
-        out = self.decoder(decoder_input, z, drop_prob)
+        logits_out, final_state = self.decoder(decoder_input, z, drop_prob, initial_state)
 
-        return out, kld, z
+        return logits_out, kld, z, final_state
 
     def learnable_parameters(self):
 
@@ -112,27 +116,42 @@ class RVAE_dilated(nn.Module):
 
             [encoder_word_input, encoder_character_input, decoder_word_input, _, target] = input
 
-            logits, kld, _ = self(dropout,
+            logits_out, kld, _, _ = self(dropout,
                                encoder_word_input, encoder_character_input,
                                decoder_word_input,
-                               z=None)
+                               z=None, initial_state=None)
+            if self.params.decoder_type == 'dilation':
+                logits = logits_out.view(-1, self.params.word_vocab_size)
+                target = target.view(-1)
+                cross_entropy = F.cross_entropy(logits, target)
 
-            logits = logits.view(-1, self.params.word_vocab_size)
-            target = target.view(-1)
-            cross_entropy = F.cross_entropy(logits, target)
+                # since cross enctropy is averaged over seq_len, it is necessary to approximate new kld
+                loss = 79 * cross_entropy + kld
 
-            # since cross enctropy is averaged over seq_len, it is necessary to approximate new kld
-            loss = 79 * cross_entropy + kld
+                logits = logits.view(batch_size, -1, self.params.word_vocab_size)
+                target = target.view(batch_size, -1)
+                ppl = perplexity(logits, target).mean()
 
-            logits = logits.view(batch_size, -1, self.params.word_vocab_size)
-            target = target.view(batch_size, -1)
-            ppl = perplexity(logits, target).mean()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            #del loss, encoder_word_input, target
-            return ppl, kld
+                return ppl, kld, None
+            elif self.params.decoder_type == 'gru':
+                decoder_target = self.embedding(target, None)
+                error = t.pow(logits_out - decoder_target, 2).mean()
+                '''
+                loss is constructed fromaveraged over whole batches error 
+                formed from squared error between output and target
+                and KL Divergence between p(z) and q(z|x)
+                '''
+                loss = 400 * error + kld_coef(i) * kld
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                return error, kld, kld_coef(i)
 
         return train
 
@@ -147,14 +166,19 @@ class RVAE_dilated(nn.Module):
 
             [encoder_word_input, encoder_character_input, decoder_word_input, _, target] = input
 
-            logits, kld, _ = self(0.,
+            logits_out, kld, _, _ = self(0.,
                                encoder_word_input, encoder_character_input,
                                decoder_word_input,
-                               z=None)
+                               z=None, initial_state=None)
+            if self.params.decoder_type == 'dilation':
+                ppl = perplexity(logits, target).mean()
 
-            ppl = perplexity(logits, target).mean()
-            #del encoder_word_input, target
-            return ppl, kld
+                return ppl, kld
+            elif self.params.decoder_type == 'gru':
+                decoder_target = self.embedding(target, None)
+                error = t.pow(logits_out - decoder_target, 2).mean()
+
+                return error, kld
 
         return validate
 
@@ -177,10 +201,10 @@ class RVAE_dilated(nn.Module):
             decoder_word_input = decoder_word_input.cuda()
             encoder_word_input = encoder_word_input.cuda()               
         if self.params.word_is_char:   #TODO only for chinese word right now
-            logits, kld, z = self(0.,
+            logits_out, kld, z, final_state = self(0.,
                                encoder_word_input, None, 
                                decoder_word_input,
-                               z=None)
+                               z=None, initial_state=None)
             return z.data.cpu().numpy()
         return None
 
@@ -190,6 +214,8 @@ class RVAE_dilated(nn.Module):
         beam_sent_wids, _ = batch_loader.go_input(1)
         results = []
         end_token_id = batch_loader.word_to_idx[batch_loader.end_token]
+        initial_state = None
+        sentence = []
 
         for i in range(seq_len):
             beam_sent_num = len(beam_sent_wids)
@@ -206,52 +232,76 @@ class RVAE_dilated(nn.Module):
 
             beam_sent_logps = None
             if template and len(template) > i and template[i] != '#':
-                beam_sent_wids = np.column_stack((beam_sent_wids, [batch_loader.word_to_idx[template[i]]]*beam_sent_num))
+                if self.params.decoder_type == 'gru':
+                    beam_sent_wids = np.array([[batch_loader.word_to_idx[template[i]]]]*beam_sent_num)
+                    sentence.append(template[i])
+                elif self.params.decoder_type == 'dilation':
+                    beam_sent_wids = np.column_stack((beam_sent_wids, [batch_loader.word_to_idx[template[i]]]*beam_sent_num))
             else:
-                logits, _, _ = self(0., None, None,
+                logits_out, _, _, initial_state = self(0., None, None,
                                  decoder_word_input,
-                                 beam_seeds)
-                [b_z_n, sl, _] = logits.size()
-                logits = logits.view(-1, self.params.word_vocab_size)
-                prediction = F.softmax(logits)
-                prediction = prediction.view(beam_sent_num, z_num, sl, -1)
-                # take mean of sentence vocab probs for each beam group
-                beam_sent_vps = np.mean(prediction.data.cpu().numpy(), 1)
-                # get vocab probs of the sentence last word for each beam group
-                beam_last_vps = beam_sent_vps[:,-1]
-                beam_last_word_size = min(batch_loader.words_vocab_size, beam_size)
-                # choose last word candidate ids for each beam group
-                beam_choosed_wids = np.array([np.random.choice(range(batch_loader.words_vocab_size), beam_last_word_size, replace=False, p=last_vps.ravel()).tolist() for last_vps in beam_last_vps])
-                # dumplicate beam sentence word ids for choosed last word size
-                beam_sent_wids = np.repeat(beam_sent_wids, [beam_last_word_size], axis=0)
-                beam_sent_wids = np.column_stack((beam_sent_wids, beam_choosed_wids.reshape(-1)))
-                # get sentence word probs
-                beam_sent_wps = []
+                                 beam_seeds, initial_state)
+                if self.params.decoder_type == 'dilation':
+                    [b_z_n, sl, _] = logits_out.size()
+                    logits = logits_out.view(-1, self.params.word_vocab_size)
+                    prediction = F.softmax(logits)
+                    prediction = prediction.view(beam_sent_num, z_num, sl, -1)
+                    # take mean of sentence vocab probs for each beam group
+                    beam_sent_vps = np.mean(prediction.data.cpu().numpy(), 1)
+                    # get vocab probs of the sentence last word for each beam group
+                    beam_last_vps = beam_sent_vps[:,-1]
+                    beam_last_word_size = min(batch_loader.words_vocab_size, beam_size)
+                    # choose last word candidate ids for each beam group
+                    beam_choosed_wids = np.array([np.random.choice(range(batch_loader.words_vocab_size), beam_last_word_size, replace=False, p=last_vps.ravel()).tolist() for last_vps in beam_last_vps])
+                    # dumplicate beam sentence word ids for choosed last word size
+                    beam_sent_wids = np.repeat(beam_sent_wids, [beam_last_word_size], axis=0)
+                    beam_sent_wids = np.column_stack((beam_sent_wids, beam_choosed_wids.reshape(-1)))
+                    # get sentence word probs
+                    beam_sent_wps = []
+                    for i, sent in enumerate(beam_sent_wids):
+                        beam_sent_wps.append([])
+                        for j, wid in enumerate(sent[1:]):
+                            beam_sent_wps[i].append(beam_sent_vps[i//beam_last_word_size][j][wid])
+                    # desc sort sum of the beam sentence log probs
+                    beam_sent_logps = np.sum(np.log(beam_sent_wps), axis=1)
+                    beam_sent_ids = np.argsort(beam_sent_logps)[-(beam_size-len(results)):][::-1]                
+                    # get the top beam size sentences
+                    beam_sent_wids = beam_sent_wids[beam_sent_ids]
+                    beam_sent_logps = np.exp(beam_sent_logps[beam_sent_ids])
+                elif self.params.decoder_type == 'gru':
+                    out = logits_out.view(-1, self.params.word_embed_size)
+                    similarity = self.embedding.similarity(out)
+                    similarity = similarity.data.cpu().numpy()
+                    #similarity = np.max(similarity, axis=1)[:,None]-similarity
+                    similarity = similarity/np.sum(similarity, axis=1)[:,None]
+                    similarity = np.mean(similarity, 0)
+                    #TODO beam search                    
+                    idx = np.random.choice(range(self.params.word_vocab_size), replace=False, p=similarity.ravel())
+                    if idx == end_token_id:
+                        break
+                    beam_sent_wids = np.array([[idx]])                    
+                    word = batch_loader.idx_to_word[idx]
+                    sentence.append(word)                    
+            if self.params.decoder_type == 'dilation':
+                # check whether some sentence is ended
+                keep = []
                 for i, sent in enumerate(beam_sent_wids):
-                    beam_sent_wps.append([])
-                    for j, wid in enumerate(sent[1:]):
-                        beam_sent_wps[i].append(beam_sent_vps[i//beam_last_word_size][j][wid])
-                # desc sort sum of the beam sentence log probs
-                beam_sent_logps = np.sum(np.log(beam_sent_wps), axis=1)
-                beam_sent_ids = np.argsort(beam_sent_logps)[-(beam_size-len(results)):][::-1]                
-                # get the top beam size sentences
-                beam_sent_wids = beam_sent_wids[beam_sent_ids]
-                beam_sent_logps = np.exp(beam_sent_logps[beam_sent_ids])
-            # check whether some sentence is ended
-            keep = []
-            for i, sent in enumerate(beam_sent_wids):
-                if sent[-1] == end_token_id:
-                    results.append(sent)
-                    self.show(batch_loader, sent, beam_sent_logps[i] if beam_sent_logps is not None and len(beam_sent_logps)>i else None)
-                else:
-                    keep.append(i)
-            beam_sent_wids = beam_sent_wids[keep]
-        results_len = len(results)
-        lack_num = beam_size - results_len
-        if lack_num > 0:
-            results = results + beam_sent_wids[:lack_num].tolist()
-            for i, sent in enumerate(results[-lack_num:]):
-                self.show(batch_loader, sent, beam_sent_logps[i+results_len] if beam_sent_logps is not None and len(beam_sent_logps)>i+results_len else None)
+                    if sent[-1] == end_token_id:
+                        results.append(sent)
+                        self.show(batch_loader, sent, beam_sent_logps[i] if beam_sent_logps is not None and len(beam_sent_logps)>i else None)
+                    else:
+                        keep.append(i)
+                beam_sent_wids = beam_sent_wids[keep]
+        if self.params.decoder_type == 'gru':
+            print(u'%s'%("" if self.params.word_is_char else " ").join(sentence))
+            return ""
+        else:
+            results_len = len(results)
+            lack_num = beam_size - results_len
+            if lack_num > 0:
+                results = results + beam_sent_wids[:lack_num].tolist()
+                for i, sent in enumerate(results[-lack_num:]):
+                    self.show(batch_loader, sent, beam_sent_logps[i+results_len] if beam_sent_logps is not None and len(beam_sent_logps)>i+results_len else None)
         return results
 
     def show(self, batch_loader, sent_wids, sent_logp):

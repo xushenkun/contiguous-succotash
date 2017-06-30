@@ -53,3 +53,18 @@ class Embedding(nn.Module):
         else:
             result = word_input
         return result
+
+    def similarity(self, input):
+        """
+        :param input: An tensor with shape of [batch_size, word_embed_size] 
+        :return: An tensor with shape [batch_size, word_vocab_size] with estimated similarity values
+        """
+        batch_size, _ = input.size()
+
+        input = input.unsqueeze(1).repeat(1, self.params.word_vocab_size, 1)
+
+        embed = self.word_embed.weight.unsqueeze(0).repeat(batch_size, 1, 1)
+
+        result = t.pow(embed - input, 2).mean(2).squeeze(2)
+
+        return t.cat([t.max(result,1)[0]]*self.params.word_vocab_size, 1) - result

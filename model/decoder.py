@@ -24,7 +24,7 @@ class Decoder(nn.Module):
 
         self.fc = nn.Linear(self.out_size, self.params.word_vocab_size)
 
-    def forward(self, decoder_input, z, drop_prob):
+    def forward(self, decoder_input, z, drop_prob, initial_state=None):
         """
         :param decoder_input: tensor with shape of [batch_size, seq_len, embed_size]
         :param z: sequence latent variable with shape of [batch_size, latent_variable_size]
@@ -45,7 +45,7 @@ class Decoder(nn.Module):
 
         z = t.cat([z] * seq_len, 1).view(batch_size, seq_len, self.params.latent_variable_size)
         decoder_input = t.cat([decoder_input, z], 2)
-        decoder_input = F.dropout(decoder_input, drop_prob)
+        decoder_input = F.dropout(decoder_input, drop_prob, training=z is None)
 
         # x is tensor with shape [batch_size, input_size=in_channels, seq_len=input_width]
         x = decoder_input.transpose(1, 2).contiguous()
@@ -66,9 +66,9 @@ class Decoder(nn.Module):
         x = x.transpose(1, 2).contiguous()
         x = x.view(-1, self.out_size)
         x = self.fc(x)
-        result = x.view(-1, seq_len, self.params.word_vocab_size)
+        logits = x.view(-1, seq_len, self.params.word_vocab_size)
 
-        return result
+        return logits, None
 
     def _add_to_parameters(self, parameters, name):
         for i, parameter in enumerate(parameters):

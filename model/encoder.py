@@ -14,7 +14,7 @@ class Encoder(nn.Module):
 
         isize = (self.params.sum_depth + self.params.word_embed_size) if not self.params.word_is_char else self.params.word_embed_size
 
-        self.hw1 = Highway(isize, 20, F.relu)
+        self.hw1 = Highway(isize, 10, F.relu)
 
         self.rnn = nn.LSTM(input_size=isize,
                            hidden_size=self.params.encoder_rnn_size,
@@ -22,7 +22,7 @@ class Encoder(nn.Module):
                            batch_first=True,
                            bidirectional=True)
 
-        self.hw2 = Highway(self.params.encoder_rnn_size * 2, 30, F.relu)
+        self.hw2 = Highway(self.params.encoder_rnn_size * 2, 20, F.relu)
 
     def forward(self, input):
         """

@@ -34,7 +34,11 @@ class Parameters:
         self.decoder_paddings = [Parameters.effective_k(w, self.decoder_dilations[i]) - 1
                                  for i, (_, _, w) in enumerate(self.decoder_kernels)]
 
+        self.decoder_rnn_size = 150
+
         self.word_is_char = word_is_char
+
+        self.decoder_type = "gru" #"dilation"
 
     @staticmethod
     def effective_k(k, d):
