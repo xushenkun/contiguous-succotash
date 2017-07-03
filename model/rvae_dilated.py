@@ -120,7 +120,7 @@ class RVAE_dilated(nn.Module):
                                encoder_word_input, encoder_character_input,
                                decoder_word_input,
                                z=None, initial_state=None)
-            if self.params.decoder_type == 'dilation':
+            if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru':
                 logits = logits_out.view(-1, self.params.word_vocab_size)
                 target = target.view(-1)
                 cross_entropy = F.cross_entropy(logits, target)
@@ -137,7 +137,7 @@ class RVAE_dilated(nn.Module):
                 optimizer.step()
 
                 return ppl, kld, None
-            elif self.params.decoder_type == 'gru':
+            elif self.params.decoder_type == 'old_gru':
                 decoder_target = self.embedding(target, None)
                 error = t.pow(logits_out - decoder_target, 2).mean()
                 '''
@@ -170,11 +170,11 @@ class RVAE_dilated(nn.Module):
                                encoder_word_input, encoder_character_input,
                                decoder_word_input,
                                z=None, initial_state=None)
-            if self.params.decoder_type == 'dilation':
-                ppl = perplexity(logits, target).mean()
+            if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru':
+                ppl = perplexity(logits_out, target).mean()
 
                 return ppl, kld
-            elif self.params.decoder_type == 'gru':
+            elif self.params.decoder_type == 'old_gru':
                 decoder_target = self.embedding(target, None)
                 error = t.pow(logits_out - decoder_target, 2).mean()
 
@@ -212,6 +212,7 @@ class RVAE_dilated(nn.Module):
         (z_num, _) = seeds.shape
         print("z sample size", z_num, "beam size", beam_size)
         beam_sent_wids, _ = batch_loader.go_input(1)
+        beam_sent_last_wid = beam_sent_wids[:,-1:]
         results = []
         end_token_id = batch_loader.word_to_idx[batch_loader.end_token]
         initial_state = None
@@ -223,25 +224,34 @@ class RVAE_dilated(nn.Module):
                 break
             if len(results) >= beam_size:
                 break
-            beam_z_sent_wids = np.repeat(beam_sent_wids, [z_num], axis=0) if z_num > 1 else beam_sent_wids
+            if self.params.decoder_type == 'dilation':
+                beam_z_sent_wids = np.repeat(beam_sent_wids, [z_num], axis=0) if z_num > 1 else beam_sent_wids
+            elif self.params.decoder_type == 'gru':
+                beam_z_sent_wids = np.repeat(beam_sent_last_wid, [z_num], axis=0) if z_num > 1 else beam_sent_last_wid
             decoder_word_input = Variable(t.from_numpy(beam_z_sent_wids).long())
             decoder_word_input = decoder_word_input.cuda() if use_cuda else decoder_word_input
             beam_seeds = Variable(t.from_numpy(seeds).float())
             beam_seeds = t.cat([beam_seeds]*beam_sent_num, 0) if beam_sent_num > 1 else beam_seeds
             beam_seeds = beam_seeds.cuda() if use_cuda else beam_seeds
+            if initial_state is not None and z_num > 1:
+                initial_state = initial_state.view(-1, 1, self.params.decoder_rnn_size)
+                initial_state = initial_state.repeat(1, z_num, 1)
+                initial_state = initial_state.view(self.params.decoder_num_layers, -1, self.params.decoder_rnn_size)
 
             beam_sent_logps = None
             if template and len(template) > i and template[i] != '#':
-                if self.params.decoder_type == 'gru':
+                if self.params.decoder_type == 'old_gru':
                     beam_sent_wids = np.array([[batch_loader.word_to_idx[template[i]]]]*beam_sent_num)
                     sentence.append(template[i])
-                elif self.params.decoder_type == 'dilation':
+                elif self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru':
                     beam_sent_wids = np.column_stack((beam_sent_wids, [batch_loader.word_to_idx[template[i]]]*beam_sent_num))
+                    beam_sent_last_wid = beam_sent_wids[:,-1:]
             else:
+                #print("input_size =", decoder_word_input.size(), "state_size =", initial_state.size() if initial_state is not None else "None")
                 logits_out, _, _, initial_state = self(0., None, None,
                                  decoder_word_input,
                                  beam_seeds, initial_state)
-                if self.params.decoder_type == 'dilation':
+                if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru':
                     [b_z_n, sl, _] = logits_out.size()
                     logits = logits_out.view(-1, self.params.word_vocab_size)
                     prediction = F.softmax(logits)
@@ -253,14 +263,20 @@ class RVAE_dilated(nn.Module):
                     beam_last_word_size = min(batch_loader.words_vocab_size, beam_size)
                     # choose last word candidate ids for each beam group
                     beam_choosed_wids = np.array([np.random.choice(range(batch_loader.words_vocab_size), beam_last_word_size, replace=False, p=last_vps.ravel()).tolist() for last_vps in beam_last_vps])
+                    # print("candidate shape =", beam_choosed_wids.shape)
                     # dumplicate beam sentence word ids for choosed last word size
                     beam_sent_wids = np.repeat(beam_sent_wids, [beam_last_word_size], axis=0)
                     beam_sent_wids = np.column_stack((beam_sent_wids, beam_choosed_wids.reshape(-1)))
+                    if initial_state is not None:
+                        initial_state = initial_state.view(-1, 1, self.params.decoder_rnn_size)
+                        initial_state = initial_state.repeat(1, beam_last_word_size, 1)
+                        initial_state = initial_state.view(self.params.decoder_num_layers, -1, self.params.decoder_rnn_size)
                     # get sentence word probs
                     beam_sent_wps = []
+                    whole_or_last = 1 if self.params.decoder_type == 'dilation' else (-1 if self.params.decoder_type == 'gru' else 0)
                     for i, sent in enumerate(beam_sent_wids):
                         beam_sent_wps.append([])
-                        for j, wid in enumerate(sent[1:]):
+                        for j, wid in enumerate(sent[whole_or_last:]):
                             beam_sent_wps[i].append(beam_sent_vps[i//beam_last_word_size][j][wid])
                     # desc sort sum of the beam sentence log probs
                     beam_sent_logps = np.sum(np.log(beam_sent_wps), axis=1)
@@ -268,7 +284,11 @@ class RVAE_dilated(nn.Module):
                     # get the top beam size sentences
                     beam_sent_wids = beam_sent_wids[beam_sent_ids]
                     beam_sent_logps = np.exp(beam_sent_logps[beam_sent_ids])
-                elif self.params.decoder_type == 'gru':
+                    #print("candidate", "".join([batch_loader.idx_to_word[wid] for wid in beam_sent_wids[:,-1].reshape(-1)]))
+                    if initial_state is not None and len(beam_sent_ids) > 0:
+                        idx = Variable(t.from_numpy(beam_sent_ids.copy())).long()
+                        initial_state = initial_state.index_select(1, idx)
+                elif self.params.decoder_type == 'old_gru':
                     out = logits_out.view(-1, self.params.word_embed_size)
                     similarity = self.embedding.similarity(out)
                     similarity = similarity.data.cpu().numpy()
@@ -282,7 +302,7 @@ class RVAE_dilated(nn.Module):
                     beam_sent_wids = np.array([[idx]])                    
                     word = batch_loader.idx_to_word[idx]
                     sentence.append(word)                    
-            if self.params.decoder_type == 'dilation':
+            if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru':
                 # check whether some sentence is ended
                 keep = []
                 for i, sent in enumerate(beam_sent_wids):
@@ -292,7 +312,12 @@ class RVAE_dilated(nn.Module):
                     else:
                         keep.append(i)
                 beam_sent_wids = beam_sent_wids[keep]
-        if self.params.decoder_type == 'gru':
+                beam_sent_last_wid = beam_sent_wids[:,-1:]
+                #print("last word", "".join([batch_loader.idx_to_word[wid] for wid in beam_sent_last_wid[:,-1].reshape(-1)]))
+                if initial_state is not None and len(keep) > 0:
+                    idx = Variable(t.from_numpy(np.array(keep))).long()
+                    initial_state = initial_state.index_select(1, idx)
+        if self.params.decoder_type == 'old_gru':
             print(u'%s'%("" if self.params.word_is_char else " ").join(sentence))
             return ""
         else:

@@ -17,7 +17,7 @@ class DecoderGRU(nn.Module):
                           batch_first=True)
 
         self.highway = Highway(self.params.decoder_rnn_size, 10, F.elu)
-        self.fc = nn.Linear(self.params.decoder_rnn_size, self.params.word_embed_size)
+        self.fc = nn.Linear(self.params.decoder_rnn_size, self.params.word_vocab_size)#word_embed_size)
 
     def forward(self, decoder_input, z, drop_prob, initial_state=None):
         """
@@ -44,7 +44,7 @@ class DecoderGRU(nn.Module):
         result = result.contiguous().view(-1, self.params.decoder_rnn_size)
         result = self.highway(result)
         result = self.fc(result)
-        result = result.view(batch_size, seq_len, self.params.word_embed_size)
+        result = result.view(batch_size, seq_len, self.params.word_vocab_size)#word_embed_size)
 
         return result, final_state
 
