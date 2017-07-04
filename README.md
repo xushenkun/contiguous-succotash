@@ -53,3 +53,5 @@ $ python sample.py
 
 `--num-sample`
 
+nohup ../python3/bin/python3 -u train.py &
+../python3/bin/python3 -u sample.py --use-trained ./data/poem_trained_2100_RVAE --beam-size 50 --z-size 30

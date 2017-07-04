@@ -52,6 +52,8 @@ if __name__ == '__main__':
     seed = rvae.style(batch_loader, u'床前看月光，疑是地上霜。举头望山月，低头思故乡。', args.use_cuda and t.cuda.is_available(), sample_size=args.z_size)
     if seed is not None:
         #result = rvae.sample(batch_loader, args.seq_len, seed, args.use_cuda and t.cuda.is_available(), u'床####，疑####。举####，低####。', args.beam_size)
-        result = rvae.sample(batch_loader, args.seq_len, seed, args.use_cuda and t.cuda.is_available(), u'', args.beam_size)
+        #result = rvae.sample(batch_loader, args.seq_len, seed, args.use_cuda and t.cuda.is_available(), u'', args.beam_size)
+        #result = rvae.sample(batch_loader, args.seq_len, seed, args.use_cuda and t.cuda.is_available(), u'床前看##，疑是地##。举头望##，低头思##。', args.beam_size)
+        result = rvae.sample(batch_loader, args.seq_len, seed, args.use_cuda and t.cuda.is_available(), u'中####，国####。搜####，索####。', args.beam_size)
         #print(result)
         print()

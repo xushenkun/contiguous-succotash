@@ -17,6 +17,8 @@ class Parameters:
         self.kernels = [(1, 25), (2, 50), (3, 75), (4, 100), (5, 125), (6, 150)]
         self.sum_depth = fold(lambda x, y: x + y, [depth for _, depth in self.kernels], 0)
 
+        self.use_highway = False
+
         self.encoder_rnn_size = 150
         self.encoder_num_layers = 2
 
@@ -38,7 +40,7 @@ class Parameters:
 
         self.word_is_char = word_is_char
 
-        self.decoder_type = "gru" #"dilation"#"gru_emb"
+        self.decoder_type = 'lstm' #"gru" #"dilation" #"lstm" #"gru_emb"
 
         self.decoder_stateful = False
 

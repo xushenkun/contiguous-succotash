@@ -14,7 +14,7 @@ class Encoder(nn.Module):
 
         isize = (self.params.sum_depth + self.params.word_embed_size) if not self.params.word_is_char else self.params.word_embed_size
 
-        self.hw1 = Highway(isize, 10, F.relu)
+        self.hw1 = Highway(isize, 10, F.relu) if self.params.use_highway else None
 
         self.rnn = nn.LSTM(input_size=isize,
                            hidden_size=self.params.encoder_rnn_size,
@@ -22,7 +22,7 @@ class Encoder(nn.Module):
                            batch_first=True,
                            bidirectional=True)
 
-        self.hw2 = Highway(self.params.encoder_rnn_size * 2, 20, F.relu)
+        self.hw2 = Highway(self.params.encoder_rnn_size * 2, 20, F.relu) if self.params.use_highway else None
 
     def forward(self, input):
         """
@@ -33,7 +33,8 @@ class Encoder(nn.Module):
         [batch_size, seq_len, embed_size] = input.size()
 
         input = input.view(-1, embed_size)
-        input = self.hw1(input)
+        if self.params.use_highway:
+            input = self.hw1(input)
         input = input.view(batch_size, seq_len, embed_size)
 
         assert parameters_allocation_check(self), \
@@ -48,6 +49,7 @@ class Encoder(nn.Module):
         h_1, h_2 = final_state[0], final_state[1]
         final_state = t.cat([h_1, h_2], 1)
 
-        final_state = self.hw2(final_state)
+        if self.params.use_highway:
+            final_state = self.hw2(final_state)
 
         return final_state

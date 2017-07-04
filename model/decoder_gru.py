@@ -16,7 +16,7 @@ class DecoderGRU(nn.Module):
                           num_layers=self.params.decoder_num_layers,
                           batch_first=True)
 
-        self.highway = Highway(self.params.decoder_rnn_size, 10, F.elu)
+        self.highway = Highway(self.params.decoder_rnn_size, 10, F.elu) if self.params.use_highway else None
         if self.params.decoder_type == 'gru_emb':
             self.fc = nn.Linear(self.params.decoder_rnn_size, self.params.word_embed_size)
         else:
@@ -45,7 +45,8 @@ class DecoderGRU(nn.Module):
         result, final_state = self.rnn(decoder_input, initial_state)
 
         result = result.contiguous().view(-1, self.params.decoder_rnn_size)
-        result = self.highway(result)
+        if self.params.use_highway:
+            result = self.highway(result)
         result = self.fc(result)
         if self.params.decoder_type == 'gru_emb':
             result = result.view(batch_size, seq_len, self.params.word_embed_size)

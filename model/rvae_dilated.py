@@ -6,6 +6,7 @@ from torch.autograd import Variable
 
 from .decoder import Decoder
 from .decoder_gru import DecoderGRU
+from .decoder_lstm import DecoderLSTM
 from .encoder import Encoder
 
 from selfModules.embedding import Embedding
@@ -27,8 +28,10 @@ class RVAE_dilated(nn.Module):
         self.context_to_mu = nn.Linear(self.params.encoder_rnn_size * 2, self.params.latent_variable_size)
         self.context_to_logvar = nn.Linear(self.params.encoder_rnn_size * 2, self.params.latent_variable_size)
 
-        if self.params.decoder_type == 'gru':
+        if self.params.decoder_type == 'gru' or self.params.decoder_type == 'gru_emb':
             self.decoder = DecoderGRU(self.params)
+        elif self.params.decoder_type == 'lstm':
+            self.decoder = DecoderLSTM(self.params)
         elif self.params.decoder_type == 'dilation':
             self.decoder = Decoder(self.params)        
 
@@ -120,13 +123,13 @@ class RVAE_dilated(nn.Module):
                                encoder_word_input, encoder_character_input,
                                decoder_word_input,
                                z=None, initial_state=None)
-            if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru':
+            if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru' or self.params.decoder_type == 'lstm':
                 logits = logits_out.view(-1, self.params.word_vocab_size)
                 target = target.view(-1)
                 cross_entropy = F.cross_entropy(logits, target)
 
                 # since cross enctropy is averaged over seq_len, it is necessary to approximate new kld
-                loss = 79 * cross_entropy + kld
+                loss = 79 * cross_entropy + kld_coef(i) * kld
 
                 logits = logits.view(batch_size, -1, self.params.word_vocab_size)
                 target = target.view(batch_size, -1)
@@ -137,7 +140,7 @@ class RVAE_dilated(nn.Module):
                 optimizer.step()
 
                 return ppl, kld, None
-            elif self.params.decoder_type == 'old_gru':
+            elif self.params.decoder_type == 'gru_emb':
                 decoder_target = self.embedding(target, None)
                 error = t.pow(logits_out - decoder_target, 2).mean()
                 '''
@@ -170,11 +173,11 @@ class RVAE_dilated(nn.Module):
                                encoder_word_input, encoder_character_input,
                                decoder_word_input,
                                z=None, initial_state=None)
-            if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru':
+            if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru' or self.params.decoder_type == 'lstm':
                 ppl = perplexity(logits_out, target).mean()
 
                 return ppl, kld
-            elif self.params.decoder_type == 'old_gru':
+            elif self.params.decoder_type == 'gru_emb':
                 decoder_target = self.embedding(target, None)
                 error = t.pow(logits_out - decoder_target, 2).mean()
 
@@ -226,7 +229,7 @@ class RVAE_dilated(nn.Module):
                 break
             if self.params.decoder_type == 'dilation' or not self.params.decoder_stateful:
                 beam_z_sent_wids = np.repeat(beam_sent_wids, [z_num], axis=0) if z_num > 1 else beam_sent_wids
-            elif self.params.decoder_type == 'gru' or self.params.decoder_type == 'gru_emb':
+            elif self.params.decoder_type == 'gru' or self.params.decoder_type == 'lstm' or self.params.decoder_type == 'gru_emb':
                 beam_z_sent_wids = np.repeat(beam_sent_last_wid, [z_num], axis=0) if z_num > 1 else beam_sent_last_wid
             decoder_word_input = Variable(t.from_numpy(beam_z_sent_wids).long())
             decoder_word_input = decoder_word_input.cuda() if use_cuda else decoder_word_input
@@ -247,7 +250,7 @@ class RVAE_dilated(nn.Module):
                 logits_out, _, _, initial_state = self(0., None, None,
                                  decoder_word_input,
                                  beam_seeds, initial_state)
-                if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru':
+                if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru' or self.params.decoder_type == 'lstm':
                     [b_z_n, sl, _] = logits_out.size()
                     logits = logits_out.view(-1, self.params.word_vocab_size)
                     prediction = F.softmax(logits)
@@ -271,7 +274,7 @@ class RVAE_dilated(nn.Module):
                         initial_state = initial_state.view(self.params.decoder_num_layers, -1, self.params.decoder_rnn_size)
                     # get sentence word probs
                     beam_sent_wps = []
-                    whole_or_last = 1 if self.params.decoder_type == 'dilation' or not self.params.decoder_stateful else (-1 if self.params.decoder_type == 'gru' else 0)
+                    whole_or_last = 1 if self.params.decoder_type == 'dilation' or not self.params.decoder_stateful else (-1 if self.params.decoder_type == 'gru' or self.params.decoder_type == 'lstm' else 0)
                     for i, sent in enumerate(beam_sent_wids):
                         beam_sent_wps.append([])
                         for j, wid in enumerate(sent[whole_or_last:]):
@@ -288,7 +291,7 @@ class RVAE_dilated(nn.Module):
                         initial_state = initial_state.index_select(1, idx)
                 elif self.params.decoder_type == 'gru_emb':
                     [b_z_n, sl, _] = logits_out.size()
-
+                    #TODO
 
                     out = logits_out.view(-1, self.params.word_embed_size)
                     similarity = self.embedding.similarity(out)
@@ -304,7 +307,7 @@ class RVAE_dilated(nn.Module):
                     beam_sent_wids = np.array([[idx]])                    
                     word = batch_loader.idx_to_word[idx]
                     sentence.append(word)                    
-            if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru':
+            if self.params.decoder_type == 'dilation' or self.params.decoder_type == 'gru' or self.params.decoder_type == 'lstm':
                 # check whether some sentence is ended
                 keep = []
                 for i, sent in enumerate(beam_sent_wids):
