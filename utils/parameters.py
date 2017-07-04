@@ -38,7 +38,9 @@ class Parameters:
 
         self.word_is_char = word_is_char
 
-        self.decoder_type = "gru" #"dilation"
+        self.decoder_type = "gru" #"dilation"#"gru_emb"
+
+        self.decoder_stateful = False
 
     @staticmethod
     def effective_k(k, d):

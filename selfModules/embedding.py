@@ -1,6 +1,7 @@
 import numpy as np
 import torch as t
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import Parameter
 
 from .tdnn import TDNN
@@ -67,4 +68,7 @@ class Embedding(nn.Module):
 
         result = t.pow(embed - input, 2).mean(2).squeeze(2)
 
-        return t.cat([t.max(result,1)[0]]*self.params.word_vocab_size, 1) - result
+        result = F.softmin(result)
+        
+        return result
+        #return t.cat([t.max(result,1)[0]]*self.params.word_vocab_size, 1) - result
